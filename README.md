@@ -86,6 +86,12 @@ The download (~250 MB) already includes the compiler and every build tool, so in
 | Motion sensors off / on | — | Touchpad click |
 | Skip the intro | Enter / Space / X | ✕ / ○ / Options |
 
+**DSU controllers (NSO GameCube controller on macOS):** run [NSO GC Driver](https://github.com/jkcoxson/nso_gc_driver),
+then turn on *DSU controllers* in the F10 menu (or set `dsu_enabled = true` under `[controller]` in `Config.toml`).
+Each controller the DSU server (default `127.0.0.1:26760`) reports appears as a gamepad. `dsu_servers` takes up to
+four `host:port` entries separated by `;`, and `dsu_layout` is `"gamecube"` (default) or `"playstation"` for other
+DSU pads. Motion is not used, so shake and tilt stay on the buttons.
+
 Xbox and Nintendo controllers use the same button positions. In game, **F10** opens the port's menu and **F11**
 toggles window / fullscreen. Everything can be remapped on the launcher's **Controls** page, where you can also
 choose whether the left stick tilts/aims or moves, and invert the sensor axes.

@@ -82,6 +82,12 @@ struct RuntimeUserConfig {
     // Debugging aid: append every KPAD sample of the Bluetooth remote (raw and
     // corrected accelerometer, buttons) to wii_accel_trace.csv next to Config.toml.
     std::optional<bool> wiiAccelTrace;
+    // DSU ("cemuhook") client: pads served over UDP, e.g. NSO GC Driver on macOS. Each connected
+    // slot becomes an SDL virtual gamepad. dsuServers is "host:port" entries separated by ';';
+    // dsuLayout is "gamecube" (a GameCube pad behind the server) or "playstation".
+    std::optional<bool> dsuEnabled;
+    std::optional<std::string> dsuServers;
+    std::optional<std::string> dsuLayout;
     std::optional<bool> networkEnabled;
     std::optional<bool> discordPresenceEnabled;
     // The application ID of the WiiCompiled Discord application. This is only
@@ -614,6 +620,9 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
     config.wiiAccelOffsetY = FindConfigValue<double>(document, "controller", "wii_accel_offset_y");
     config.wiiAccelOffsetZ = FindConfigValue<double>(document, "controller", "wii_accel_offset_z");
     config.wiiAccelTrace = FindConfigValue<bool>(document, "controller", "wii_accel_trace");
+    config.dsuEnabled = FindConfigValue<bool>(document, "controller", "dsu_enabled");
+    config.dsuServers = FindConfigValue<std::string>(document, "controller", "dsu_servers");
+    config.dsuLayout = FindConfigValue<std::string>(document, "controller", "dsu_layout");
     config.networkEnabled = FindConfigValue<bool>(document, "network", "enabled");
     config.discordPresenceEnabled = FindConfigValue<bool>(document, "discord", "enabled");
     config.discordClientId = FindConfigValue<std::string>(document, "discord", "client_id");
@@ -1100,6 +1109,29 @@ inline std::array<double, 3> WiiAccelOffset() {
 // Whether to write the per-frame accelerometer trace (off unless asked for).
 inline bool WiiAccelTraceEnabled(bool fallback = false) {
     return Get().wiiAccelTrace.value_or(fallback);
+}
+
+// DSU client settings (see runtime/src/dsu_client.cpp). Off by default.
+inline bool DsuEnabled(bool fallback = false) {
+    return Get().dsuEnabled.value_or(fallback);
+}
+inline std::string DsuServers() {
+    return Get().dsuServers.value_or("127.0.0.1:26760");
+}
+inline std::string DsuLayout() {
+    return Get().dsuLayout.value_or("gamecube");
+}
+inline bool SetDsuEnabled(bool value) {
+    Mutable().dsuEnabled = value;
+    return WriteSetting("controller", "dsu_enabled", value ? "true" : "false");
+}
+inline bool SetDsuServers(const std::string& value) {
+    Mutable().dsuServers = value;
+    return WriteSetting("controller", "dsu_servers", FormatString(value));
+}
+inline bool SetDsuLayout(const std::string& value) {
+    Mutable().dsuLayout = value;
+    return WriteSetting("controller", "dsu_layout", FormatString(value));
 }
 
 // True while a non-zero correction is stored ("Clear calibration" writes zeros).

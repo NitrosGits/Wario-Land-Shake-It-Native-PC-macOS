@@ -24,6 +24,7 @@ extern "C" void WarioIntroButtons(uint32_t hold);
 #include "runtime_log.h"
 #include "memory.h"
 #include "wii_remote_input.h"
+#include "dsu_client.h"
 
 #include <imgui.h>
 #include <SDL3/SDL_events.h>
@@ -811,6 +812,7 @@ void DrawControllerSettings() {
     ImGui::Separator();
     controller_mapping_wizard::DrawSetupList();
     DrawWiiRemoteSettings(selectedGamePort);
+    DsuClient::DrawSettingsMenu();
     const uint32_t controllerCount = PADCount();
     if (controllerCount == 0) {
         ImGui::TextDisabled("No controller connected");
@@ -2119,6 +2121,7 @@ void Draw() noexcept {
     // its "communications interrupted" prompt without polling pads). Same guest
     // thread as PADRead, so no concurrent access to the scanner's state.
     WiiRemoteInput::Poll();
+    DsuClient::Update();
     ApplyConfiguredMappings();
     PersistDisplayModeIfChanged();
     UpdateCursorAutoHide();
