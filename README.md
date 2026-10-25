@@ -90,7 +90,9 @@ The download (~250 MB) already includes the compiler and every build tool, so in
 then turn on *DSU controllers* in the F10 menu (or set `dsu_enabled = true` under `[controller]` in `Config.toml`).
 Each controller the DSU server (default `127.0.0.1:26760`) reports appears as a gamepad. `dsu_servers` takes up to
 four `host:port` entries separated by `;`, and `dsu_layout` is `"gamecube"` (default) or `"playstation"` for other
-DSU pads. Motion is not used, so shake and tilt stay on the buttons.
+DSU pads. A GameCube pad gets its own layout: the left stick moves, the C-stick aims/tilts the remote (up to 85°), Z shakes,
+L/R tilt 30°, Home is −, A jumps, B/X run and Y is the remote's A button. Override any of it with
+`gamecube_<action>` entries in `[gamepad]` (e.g. `gamecube_shake = "lefttrigger"`) or `wario_left_stick`.
 
 Xbox and Nintendo controllers use the same button positions. In game, **F10** opens the port's menu and **F11**
 toggles window / fullscreen. Everything can be remapped on the launcher's **Controls** page, where you can also

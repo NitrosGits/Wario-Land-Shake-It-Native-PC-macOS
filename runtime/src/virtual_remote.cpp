@@ -112,12 +112,12 @@ struct Motion {
 //                      | "dpad" (mueve la cruceta)
 //   wario_motion = "on" | "off"  (sensores del mando al arrancar; el panel tactil / Share los cambia)
 //   wario_motion_invert_roll / wario_motion_invert_pitch = "1"
-int WarioLeftStickMode() {  // 0 aim, 1 tilt, 2 dpad
-    static const int mode = [] {
-        const std::string v = RuntimeConfigFile::GamepadBinding("wario_left_stick");
-        return v == "dpad" ? 2 : v == "tilt" ? 1 : 0;
-    }();
-    return mode;
+//   A GameCube pad (e.g. through the DSU client) moves with the left stick unless wario_left_stick says
+//   otherwise, and its C-stick aims/tilts the remote like "aim" does for the left stick.
+int WarioLeftStickMode(bool gamecube = false) {  // 0 aim, 1 tilt, 2 dpad
+    static const std::string v = RuntimeConfigFile::GamepadBinding("wario_left_stick");
+    if (v.empty() && gamecube) return 2;
+    return v == "dpad" ? 2 : v == "tilt" ? 1 : 0;
 }
 std::atomic<int> g_warioMotionState{-1};  // -1 = aun sin leer Config.toml
 bool WarioMotionOn() {
@@ -204,27 +204,28 @@ struct PadInput {
     int sign = 0;  // stick direction for an axis, 0 for a trigger
 };
 using PadLayout = std::array<std::vector<PadInput>, Keybinds::kActionCount>;
-enum PadStyle { kXbox, kPlayStation, kNintendo, kPadStyleCount };
+enum PadStyle { kXbox, kPlayStation, kNintendo, kGameCube, kPadStyleCount };
 
 // Defaults per style, in Keybinds order: the same jobs the GameCube-pad route gave each position
 // (bottom = 2/jump, left and right = 1, top = A, start = +, back/LB/LT = -, RB/RT = shake, right
 // stick = tilt). Nintendo pads jump with both B and A (bottom and right), like Mario games there.
-constexpr const char* kPadStyleNames[kPadStyleCount] = {"xbox", "playstation", "nintendo"};
+constexpr const char* kPadStyleNames[kPadStyleCount] = {"xbox", "playstation", "nintendo", "gamecube"};
 constexpr const char* kPadDefaults[Keybinds::kActionCount][kPadStyleCount] = {
     // WARIO: el stick izquierdo lo gestiona [gamepad] wario_left_stick (inclinar/apuntar o cruceta).
-    {"dpup", "dpup", "dpup"},
-    {"dpdown", "dpdown", "dpdown"},
-    {"dpleft", "dpleft", "dpleft"},
-    {"dpright", "dpright", "dpright"},
-    {"a", "a", "a,b"},
-    {"b,x", "b,x", "x"},
-    {"y", "y", "y"},
+    {"dpup", "dpup", "dpup", "dpup"},
+    {"dpdown", "dpdown", "dpdown", "dpdown"},
+    {"dpleft", "dpleft", "dpleft", "dpleft"},
+    {"dpright", "dpright", "dpright", "dpright"},
+    {"a", "a", "a,b", "a"},
+    {"b,x", "b,x", "x", "b,x"},
+    {"y", "y", "y", "y"},
     // WARIO (como portWario): L2/R2 sacuden, L1/R1 inclinan 30 grados, el panel tactil activa los sensores.
-    {"lefttrigger,righttrigger", "lefttrigger,righttrigger", "lefttrigger,righttrigger"},
-    {"leftshoulder", "leftshoulder", "leftshoulder"},
-    {"rightshoulder", "rightshoulder", "rightshoulder"},
-    {"start", "start", "start"},
-    {"back", "back", "back"},
+    // GameCube: Z sacude, L/R (analogicos) inclinan 30 grados, Home es menos; el stick C apunta.
+    {"lefttrigger,righttrigger", "lefttrigger,righttrigger", "lefttrigger,righttrigger", "rightshoulder"},
+    {"leftshoulder", "leftshoulder", "leftshoulder", "lefttrigger"},
+    {"rightshoulder", "rightshoulder", "rightshoulder", "righttrigger"},
+    {"start", "start", "start", "start"},
+    {"back", "back", "back", "guide"},
 };
 constexpr const char* kPadActionKeys[Keybinds::kActionCount] = {
     "up", "down", "left", "right", "jump", "run", "a", "shake", "tilt_left", "tilt_right", "plus", "minus",
@@ -287,6 +288,8 @@ PadStyle StyleFor(SDL_Gamepad* gamepad) {
     case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
     case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
         return kNintendo;
+    case SDL_GAMEPAD_TYPE_GAMECUBE:
+        return kGameCube;
     default:
         return kXbox;
     }
@@ -336,7 +339,7 @@ Intent GamepadIntent() {
         }
         const PadStyle style = StyleFor(gamepad);
         const PadLayout& layout = layouts[style];
-        if (firstStyle < 0) firstStyle = style;
+        if (firstStyle < 0) firstStyle = style == kGameCube ? kNintendo : style;
         const Intent before = intent;
         const auto held = [&](int action) {
             for (const PadInput& input : layout[action]) {
@@ -353,7 +356,7 @@ Intent GamepadIntent() {
         const float sx = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX) / 32767.0f;
         const float sy = -SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY) / 32767.0f;  // +y up
         constexpr float kStickMin = kStickThreshold / 127.0f;
-        const int stickMode = WarioLeftStickMode();
+        const int stickMode = WarioLeftStickMode(style == kGameCube);
         float stickTilt = 0.0f;
         if (stickMode == 0) {
             // Apuntar (host_gamepad_aim_direction de portWario): el angulo de la direccion del stick, con
@@ -369,6 +372,18 @@ Intent GamepadIntent() {
         } else if (stickMode == 1) {
             const float ax = std::fabs(sx) < 0.16f ? 0.0f : (sx - std::copysign(0.16f, sx)) / 0.84f;
             stickTilt = std::clamp(ax, -1.0f, 1.0f);
+        }
+        if (style == kGameCube) {  // C-stick: aim like the left stick does in "aim" mode (up to 85 degrees)
+            static int s_sideC = 1;
+            const float cx = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX) / 32767.0f;
+            const float cy = -SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY) / 32767.0f;
+            const float cmag = std::sqrt(cx * cx + cy * cy);
+            if (cmag >= 0.25f) {
+                if (cx > cmag * 0.34f) s_sideC = 1; else if (cx < -cmag * 0.34f) s_sideC = -1;
+                float elev = std::atan2(cy, s_sideC > 0 ? cx : -cx) * 57.29578f;
+                elev = std::clamp(elev, -85.0f, 85.0f);
+                stickTilt = (s_sideC > 0 ? elev : -elev) / 85.0f;
+            }
         }
         if (stickMode == 2 && sx * sx + sy * sy >= kStickMin * kStickMin) {
             if (std::fabs(sx) >= kDiagonalSlope * std::fabs(sy)) intent.buttons |= sx < 0 ? kScreenLeft : kScreenRight;
@@ -420,7 +435,7 @@ Intent GamepadIntent() {
                 }
             }
         }
-        if (intent.buttons != before.buttons || intent.shake != before.shake) s_lastPressedStyle = style;
+        if (intent.buttons != before.buttons || intent.shake != before.shake) s_lastPressedStyle = style == kGameCube ? kNintendo : style;
     }
     SDL_free(ids);
     if (firstStyle < 0) s_lastPressedStyle = -1;
